@@ -10,4 +10,11 @@ A script to query puppetdb and tell you what something is.
 * can use authenticated or unauthenticated puppetdb API. 
 
 
+Todo
+----
 
+[ ] Make existing whats script more generic
+[ ] add example config
+[ ] make it look for `/etc/whats.yaml`, `~/.whats.yaml` and let user specify a config
+[ ] add Gemfile
+[ ] Make rubygem? 
