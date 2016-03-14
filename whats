@@ -16,12 +16,17 @@ require 'resolv'
 require 'ipaddr'
 
 #SETUP
-puppetdb_host="pdb.broadinstitute.org"
-puppetdb_port="8080"
-domains=[".broadinstitute.org",".openstacklocal"]
-#Array of the basic info we want to return w/o -a
-
-basic_info=["hostname","born_on","manufacturer","productname","serialnumber","operatingsystem","operatingsystemrelease","architecture","processor0","processorcount","memorysize","kernelrelease","ipaddress","macaddress","vlan","virtual","uptime"]
+default_options={
+  :puppetdb_host => 'puppetdb',
+  :puppetdb_port => '8081',
+  :domains       => ['.local'],
+  :basic_info    => ["hostname","born_on","manufacturer","productname","serialnumber","operatingsystem","operatingsystemrelease","architecture","pr      ocessor0","processorcount","memorysize","kernelrelease","ipaddress","macaddress","vlan","virtual","uptime"],
+  :verbose       => false,
+  :yaml          => false,
+  :json          => false,
+  :sort          => false,
+  :all           => false,  
+}
 
 options={}
 OptionParser.new do |opts|
