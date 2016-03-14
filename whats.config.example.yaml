@@ -1,0 +1,9 @@
+---
+puppetdb_server: 
+puppetdb_port:
+domains:
+  -
+  - 
+basic_info:
+  -
+  -
