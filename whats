@@ -26,6 +26,7 @@ default_options={
   :json          => false,
   :sort          => false,
   :all           => false,  
+  :config        => ''
 }
 
 options={}
@@ -57,6 +58,17 @@ else
         else 
           host = ARGV[0].downcase
         end
+end
+
+
+#Search fo configs, user specific then global.
+def config_find()
+  config_search_paths=['~/.whats.yaml','/etc/whats.yaml']
+  config_search_paths.each do |path|
+    #If #{path} is a file and re can read it, return it.
+    #
+    return (path)
+  end
 end
 
 #if we passed shortname, get fqdn
