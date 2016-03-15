@@ -1,9 +1,9 @@
 ---
-puppetdb_server: 
-puppetdb_port:
+puppetdb_server: 'puppetdb.some.domain.com'
+puppetdb_port: '8080'
 domains:
-  -
-  - 
+  - some.domain.com
+  - domain.com
 basic_info:
-  -
-  -
+  - hostname
+  - uptime

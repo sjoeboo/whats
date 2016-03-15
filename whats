@@ -1,63 +1,73 @@
 #!/usr/bin/env ruby
 
-require 'rubygems'
 require 'optparse'
 require 'yaml'
-require 'puppet'
-require 'puppet/node'
-require 'puppet/node/facts'
 require 'pp'
 require 'json'
 require 'yaml'
 require 'net/http'
 require 'uri'
-require 'timeout'
 require 'resolv'
 require 'ipaddr'
+require 'terminal-table'
 
 #SETUP
 default_options={
   :puppetdb_host => 'puppetdb',
   :puppetdb_port => '8081',
   :domains       => ['.local'],
-  :basic_info    => ["hostname","born_on","manufacturer","productname","serialnumber","operatingsystem","operatingsystemrelease","architecture","pr      ocessor0","processorcount","memorysize","kernelrelease","ipaddress","macaddress","vlan","virtual","uptime"],
+  :basic_info    => ["hostname","manufacturer","productname","serialnumber","operatingsystem","operatingsystemrelease","architecture","processor0","processorcount","memorysize","kernelrelease","ipaddress","macaddress","virtual","uptime"],
   :verbose       => false,
   :yaml          => false,
   :json          => false,
   :sort          => false,
-  :all           => false,  
-  :config        => ''
+  :all           => false,
+  :config        => '',
+  :quiet         => false,
+
 }
 
-options={}
-OptionParser.new do |opts|
-        opts.banner = "Usage: whats [options] <hostname>"
+options = default_options
 
-        opts.on("-j","--json","JSON output") do |j|
-                options[:json] = j
-        end
-        opts.on("-y","--yaml","YAML output") do |y|
-                options[:yaml] = y
-        end
-        opts.on("-p","--pp","Pretty Print output") do |p|
-                options[:pp] = p
-        end
-        opts.on("-a","--all","Use all facts") do |a|
-                options[:all] = a
-        end
-end.parse!
+OptionParser.new do |opts|
+  opts.banner = "Usage: whats [options] <hostname>"
+
+  opts.on("-j","--json","JSON output") do |j|
+    options[:json] = j
+  end
+  opts.on("-y","--yaml","YAML output") do |y|
+    options[:yaml] = true
+  end
+  opts.on("-p","--pp","Pretty Print output") do |p|
+    options[:pp] = true
+  end
+  opts.on("-a","--all","Use all facts") do |a|
+    options[:all] = true
+  end
+  opts.on("-c","--config CONFIG","Config file to use") do |c|
+    options.merge!(Hash[YAML::load(open(c)).map { |k, v| [k.to_sym, v] }])
+  options[:config] = c
+  end
+  opts.on("-v","--verbose", "Be verbose") do |v|
+    options[:verbose] = v
+  end
+  opts.on("-q","--quiet", "Be extra quiet, only shown") do |q|
+    options[:quiet] = q
+  end
+  opts.parse!
+end.parse
 
 if ARGV.length != 1
-        puts "Please pass a hostname, see --help"
-        exit
+  puts "Please pass a hostname, see --help"
+  exit
 else
-        #see if we were given an ip instead, and if so, get hostname
-        if !(IPAddr.new(ARGV[0]) rescue nil).nil?
-                #got an ip, convert
-                host = Resolv.new.getname ARGV[0]
-        else 
-          host = ARGV[0].downcase
-        end
+#see if we were given an ip instead, and if so, get hostname
+  if !(IPAddr.new(ARGV[0]) rescue nil).nil?
+    #got an ip, convert
+    host = Resolv.new.getname ARGV[0]
+        else
+    host = ARGV[0].downcase
+    end
 end
 
 
@@ -66,9 +76,12 @@ def config_find()
   config_search_paths=['~/.whats.yaml','/etc/whats.yaml']
   config_search_paths.each do |path|
     #If #{path} is a file and re can read it, return it.
-    #
-    return (path)
+    if File.exists?(File.expand_path(path))
+      return (path)
+    end
   end
+  #no config found
+  raise ("No config found!")
 end
 
 #if we passed shortname, get fqdn
@@ -82,15 +95,35 @@ def domain_fix(host,domain,match)
       return(fqdn)
 end
 
+#Query to see if the node we're looking for exists
+def node_test(puppetdb_host,puppetdb_port,fqdn)
+  test_uri=URI.parse("http://#{puppetdb_host}:#{puppetdb_port}/pdb/query/v4/nodes/#{fqdn}")
+  test_response = Net::HTTP.get_response(test_uri)
+  test_body=JSON.parse(test_response.body)
+  if test_body.key?("error")
+    return false
+  else
+    return true
+  end
+end
+
+#get all facts for the given node
 def get_facts(puppetdb_host,puppetdb_port,fqdn)
-  uri=URI.parse("http://#{puppetdb_host}:#{puppetdb_port}/v2/nodes/#{fqdn}/facts")
+  uri=URI.parse("http://#{puppetdb_host}:#{puppetdb_port}/pdb/query/v4/nodes/#{fqdn}/facts")
   response = Net::HTTP.get_response(uri)
   facts=JSON.parse(response.body)
   return(facts)
 end
 
+#Parse the fact output from puppetdb into a simpler hash
+#
+# v4 apit returns facts as an array, with each element a hash like
+#{"certname"=>"some_host",
+#  "environment"=>"some_env",
+#  "name"=>"memorysize",
+#  "value"=>"3.70 GiB"},
+#
 def facts_to_hash(facts)
-  #Parse the fact output from puppetdb into a simpler hash
   node_facts=Hash.new
   facts.each do |fact|
     node_facts[fact["name"]] = fact["value"]
@@ -99,8 +132,9 @@ def facts_to_hash(facts)
 end
 
 #do output
-def output(options,values,facts2)
+def output(options,facts2)
   #output time
+  values=options[:basic_info]
   if options[:json] == true
           puts facts2.to_json
   elsif options[:yaml] == true
@@ -108,56 +142,73 @@ def output(options,values,facts2)
   elsif options[:pp] == true
           pp facts2
   else
-    if options[:all] == true
-        pp facts2
-    else
-        values.each do |val|
-          puts "#{val.capitalize}: #{facts2[val]}"
-        end
-    end
+  #if options[:all] == true
+  #    pp facts2
+  #else
+      table=Terminal::Table.new :headings => ['Fact', 'Value'], :rows => facts2
+      puts table
+  #  end
   end
 end
 
 #MAIN
+
+#load config
+if options[:config] == ""
+  config=config_find()
+  options[:config] = config
+  options.merge!(Hash[YAML::load(open(File.expand_path(config))).map { |k, v| [k.to_sym, v] }])
+  if options[:verbose]
+    pp options
+  end
+else
+  options.merge!(Hash[YAML::load(open(File.expand_path(options[:config]))).map { |k, v| [k.to_sym, v] }])
+  if options[:verbose]
+    pp options
+  end
+end
 #try the name as given first, some hosts have short certnames(sigh)
-puts "Searching for #{host}..."
-$facts=get_facts(puppetdb_host,puppetdb_port,host)
-if $facts == []
-  domains.each do |dom|
-    match=dom.split('.')[-1]
-    fqdn=domain_fix(host,dom,match)
-    $facts=get_facts(puppetdb_host,puppetdb_port,fqdn)
-    if $facts != []
-      #we got data, break
+
+if !options[:quiet]
+  puts "Searching for #{host}..."
+end
+#detect if we got a short hostname or a fqdn.
+if host.include?('.')
+  fqdn=host
+  if node_test(options[:puppetdb_host],options[:puppetdb_port],fqdn)
+    facts=get_facts(options[:puppetdb_host],options[:puppetdb_port],fqdn)
+  else
+    raise ("Node #{fqdn} not found in puppetdb")
+  end
+else
+  #we will need to itterate the available search domains...
+  options[:domains].each do |dom|
+    fqdn="#{host}.#{dom}"
+    if !options[:quiet]
+      puts "Searching for #{fqdn}"
+    end
+    if node_test(options[:puppetdb_host],options[:puppetdb_port],fqdn)
+      facts=get_facts(options[:puppetdb_host],options[:puppetdb_port],fqdn)
       break
     else
       next
     end
   end
+  if facts == nil
+    raise ("node #{host} not found after serching all domains")
+  end
 end
 
-if $facts == []
-#if we still have no info, exit
-  puts "Unable to find #{host}, please check the name"
-  exit
-end
 
-node_facts=facts_to_hash($facts)
+node_facts=facts_to_hash(facts)
 
 facts2 = Hash.new
 if options[:all] == true
   facts2 = node_facts
 else
-  if node_facts['compute_node'] == 'true'
-        basic_info.push('compute_node')
-        basic_info.push('compute_type')
-  end
-  if node_facts.include?('warranty_expiration') == true
-        basic_info.push('warranty_expiration')
-  end
-  basic_info.each do |val|
-    facts2[val] = node_facts[val]
+  options[:basic_info].each do |val|
+    facts2["#{val}"] = node_facts[val]
   end
 end
 
-output(options,basic_info,facts2)
+output(options,facts2)
