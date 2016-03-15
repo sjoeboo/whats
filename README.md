@@ -94,5 +94,5 @@ Searching for puppetca.test.domain
 Todo
 ----
 
-[ ] Add SSL support
-[ ] Make rubygem?
+* [ ] Add SSL support
+
