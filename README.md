@@ -12,7 +12,9 @@ Basically, `whats` is a wrapper around the puppetdb api, and will return facts y
 
 Installation
 ------------
-Currently, jsut clone the repo, copy into `$PATH` and create either `~/.whats.yaml` or `/etc/whats.yaml`, containing any of the options, and specifying your puppetdb host/post, list of domains to complete for, and list of facts you want (if you want to override the defaults)
+```
+gem install puppet-whats
+```
 
 Config Example
 --------------
